@@ -128,11 +128,11 @@ init_ca() {
     fi
 }
 
-# 2. Generate Server Certificate
+# 2. Generate Server Certificate (Smart IP/DNS Detection)
 gen_server() {
     check_ca || return
-    read -p "Enter Server Domain (e.g., myserver.local): " DOMAIN
-
+    read -p "Enter Server Domain or IP (e.g., 192.168.1.50): " DOMAIN
+    
     mkdir -p "$DIR_SERVERS/$DOMAIN"
     KEY="$DIR_SERVERS/$DOMAIN/server.key"
     CSR="$DIR_SERVERS/$DOMAIN/server.csr"
@@ -140,18 +140,24 @@ gen_server() {
 
     echo -e "${GREEN}Creating Server Cert for $DOMAIN...${NC}"
 
+    # DETECT IF INPUT IS IP OR DNS
+    if [[ "$DOMAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        SAN="IP:$DOMAIN"    # Use IP tag
+    else
+        SAN="DNS:$DOMAIN"   # Use DNS tag
+    fi
+
     # 1. Gen Key & CSR
     openssl req -new -nodes $(get_key_args) -keyout "$KEY" -out "$CSR" \
         -subj "/O=HomeLab/CN=$DOMAIN" \
-        -addext "subjectAltName = DNS:$DOMAIN"
+        -addext "subjectAltName = $SAN"
 
-    # 2. Sign with CA (Database Update)
-    # We use 'openssl ca' now to track the cert in index.txt
+    # 2. Sign with CA
     openssl ca -config "$CONF" -batch -notext -in "$CSR" -out "$CRT" \
         -extensions server_ext
 
     rm "$CSR"
-    echo -e "${GREEN}Server Cert Created: $CRT${NC}"
+    echo -e "${GREEN}Server Cert Created ($SAN): $CRT${NC}"
 }
 
 # 3. Generate User Certificate
